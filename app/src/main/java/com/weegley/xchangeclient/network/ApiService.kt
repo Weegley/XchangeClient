@@ -1,41 +1,40 @@
 package com.weegley.xchangeclient.network
 
+import com.weegley.xchangeclient.network.dto.OAuthToken
 import com.weegley.xchangeclient.network.dto.ApiEnvelope
-import com.weegley.xchangeclient.network.dto.AuthToken
 import com.weegley.xchangeclient.network.dto.ConnectStatus
 import com.weegley.xchangeclient.network.dto.UserProfile
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.*
 
-/**
- * Мобильное API m.xchange-box.com
- */
 interface ApiService {
 
-    // OAuth: возвращает "плоский" JSON с токеном, НЕ ApiEnvelope
+    // OAuth password grant (мобильный сайт)
     @FormUrlEncoded
     @POST("api/oauth/token")
-    suspend fun loginOAuth(
+    suspend fun loginOAuthPassword(
+        @Header("Authorization") authHeaderBasic: String,   // "Basic <CLIENT_AUTH_TOKEN>"
+        @Field("grant_type") grantType: String = "password",
         @Field("username") username: String,
         @Field("password") password: String,
-        @Field("grant_type") grantType: String = "password",
-        @Field("client_id") clientId: String = "mobile"
-    ): AuthToken
+        // не обязателен, но веб иногда шлёт
+        @Field("remember") remember: Boolean = true
+    ): OAuthToken
 
-    // Профиль пользователя (обёрнут ApiEnvelope с полем "return")
+    // Профиль пользователя
     @GET("api/user/{username}")
-    suspend fun getUserProfile(
-        @Path("username") username: String
-    ): ApiEnvelope<UserProfile>
+    suspend fun getUserProfile(@Path("username") username: String): ApiEnvelope<UserProfile>
 
-    // Статус DATA-сессии
+    // Статус data-сессии
     @GET("api/connection/DATA/status")
     suspend fun getConnectStatus(): ApiEnvelope<ConnectStatus>
 
-    // Старт DATA-сессии
+    // Старт data-сессии
     @POST("api/connection/DATA/start")
-    suspend fun startData(@Query("channelId") channelId: Int): ApiEnvelope<ConnectStatus>
+    suspend fun startData(@Query("channelId") channelId: Int): ApiEnvelope<ConnectStatus?>
 
-    // Стоп DATA-сессии
+    // Стоп data-сессии
     @POST("api/connection/DATA/stop")
-    suspend fun stopData(): ApiEnvelope<ConnectStatus>
+    suspend fun stopData(): ApiEnvelope<ConnectStatus?>
 }

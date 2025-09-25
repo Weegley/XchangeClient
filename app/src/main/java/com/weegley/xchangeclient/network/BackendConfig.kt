@@ -1,7 +1,5 @@
 package com.weegley.xchangeclient.network
 
-import android.util.Log
-import okhttp3.Interceptor
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -12,51 +10,42 @@ import java.net.CookiePolicy
 import java.util.concurrent.TimeUnit
 
 object BackendConfig {
-    private const val TAG = "BackendConfig"
     private const val BASE_URL = "https://m.xchange-box.com/"
 
     private val cookieManager by lazy {
         CookieManager().apply { setCookiePolicy(CookiePolicy.ACCEPT_ALL) }
     }
 
-    private val authInterceptor = Interceptor { chain ->
-        val req = chain.request()
-        val path = req.url.encodedPath
-        // НЕ прикручиваем Bearer к запросу получения токена
-        if (path.startsWith("/api/oauth/token")) {
-            return@Interceptor chain.proceed(req)
-        }
-        val token = TokenStore.accessToken
-        if (!token.isNullOrBlank()) {
-            val newReq = req.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-            chain.proceed(newReq)
-        } else {
-            chain.proceed(req)
-        }
-    }
-
-    private val logging = HttpLoggingInterceptor { msg ->
-        Log.i("okhttp.OkHttpClient", msg)
-    }.apply {
-        level = HttpLoggingInterceptor.Level.BASIC
-    }
-
-    // Делаем клиент доступным и для Retrofit, и для WsClient
     val okHttpClient: OkHttpClient by lazy {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
         OkHttpClient.Builder()
-            .cookieJar(JavaNetCookieJar(cookieManager))
             .followRedirects(true)
             .followSslRedirects(true)
+            .cookieJar(JavaNetCookieJar(cookieManager))
+            // Общий accept/user-agent
             .addInterceptor { chain ->
-                val base = chain.request().newBuilder()
+                val req = chain.request()
+                val newReq = req.newBuilder()
                     .header("Accept", "application/json, text/plain, */*")
-                    .header("User-Agent", "XchangeClient/1.0 (Android)")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0")
                     .build()
-                chain.proceed(base)
+                chain.proceed(newReq)
             }
-            .addInterceptor(authInterceptor)
+            // ВАЖНО: для /api/oauth/token добавляем Origin/Referer (как в браузере)
+            .addInterceptor { chain ->
+                val req = chain.request()
+                val p = req.url.encodedPath
+                val needsWebLikeHeaders = p == "/api/oauth/token"
+                val newReq = if (needsWebLikeHeaders) {
+                    req.newBuilder()
+                        .header("Origin", "https://m.xchange-box.com")
+                        .header("Referer", "https://m.xchange-box.com/")
+                        .build()
+                } else req
+                chain.proceed(newReq)
+            }
             .addInterceptor(logging)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

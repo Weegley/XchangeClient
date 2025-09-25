@@ -2,11 +2,6 @@ package com.weegley.xchangeclient.network
 
 import com.google.gson.annotations.SerializedName
 
-// Общий конверт API (нам важен только "return")
-data class ApiEnvelope<T>(
-    @SerializedName("return") val data: T?
-)
-
 /** Статус data-сессии */
 data class ConnectStatus(
     val status: String?,
