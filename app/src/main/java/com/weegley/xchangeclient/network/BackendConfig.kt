@@ -16,35 +16,36 @@ object BackendConfig {
         CookieManager().apply { setCookiePolicy(CookiePolicy.ACCEPT_ALL) }
     }
 
+    // Делаем клиент публичным (используется и Retrofit, и WsClient)
     val okHttpClient: OkHttpClient by lazy {
         val logging = HttpLoggingInterceptor().apply {
+            // Для отладки удобно BASIC/HEADERS; BODY оставь по необходимости
             level = HttpLoggingInterceptor.Level.BASIC
         }
+
         OkHttpClient.Builder()
             .followRedirects(true)
             .followSslRedirects(true)
             .cookieJar(JavaNetCookieJar(cookieManager))
-            // Общий accept/user-agent
+            // Общие заголовки и Bearer
             .addInterceptor { chain ->
-                val req = chain.request()
-                val newReq = req.newBuilder()
+                val orig = chain.request()
+                val b = orig.newBuilder()
                     .header("Accept", "application/json, text/plain, */*")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0")
-                    .build()
-                chain.proceed(newReq)
-            }
-            // ВАЖНО: для /api/oauth/token добавляем Origin/Referer (как в браузере)
-            .addInterceptor { chain ->
-                val req = chain.request()
-                val p = req.url.encodedPath
-                val needsWebLikeHeaders = p == "/api/oauth/token"
-                val newReq = if (needsWebLikeHeaders) {
-                    req.newBuilder()
-                        .header("Origin", "https://m.xchange-box.com")
-                        .header("Referer", "https://m.xchange-box.com/")
-                        .build()
-                } else req
-                chain.proceed(newReq)
+                    .header("User-Agent", "XchangeClient/1.0 (Android)")
+
+                // Подставляем Bearer, если токен есть и если это НЕ oauth/token
+                val urlStr = orig.url.toString()
+                if (!urlStr.contains("/api/oauth/token")) {
+                    TokenStore.accessToken?.let { token ->
+                        // Не затираем, если явно уже задан где-то сверху
+                        if (orig.header("Authorization") == null) {
+                            b.header("Authorization", "Bearer $token")
+                        }
+                    }
+                }
+
+                chain.proceed(b.build())
             }
             .addInterceptor(logging)
             .connectTimeout(20, TimeUnit.SECONDS)

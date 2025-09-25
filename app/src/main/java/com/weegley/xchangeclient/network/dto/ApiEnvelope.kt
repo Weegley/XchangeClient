@@ -2,10 +2,6 @@ package com.weegley.xchangeclient.network.dto
 
 import com.google.gson.annotations.SerializedName
 
-/**
- * Унифицированная обёртка для большинства ответов (кроме OAuth).
- * Данные лежат в поле [value] (из "return").
- */
 data class ApiEnvelope<T>(
     @SerializedName("return")
     val value: T? = null,

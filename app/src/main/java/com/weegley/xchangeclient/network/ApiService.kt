@@ -1,6 +1,5 @@
 package com.weegley.xchangeclient.network
 
-import com.weegley.xchangeclient.network.dto.OAuthToken
 import com.weegley.xchangeclient.network.dto.ApiEnvelope
 import com.weegley.xchangeclient.network.dto.ConnectStatus
 import com.weegley.xchangeclient.network.dto.UserProfile
@@ -10,21 +9,21 @@ import retrofit2.http.*
 
 interface ApiService {
 
-    // OAuth password grant (мобильный сайт)
+    // OAuth2 password grant – делается напрямую из AuthRepository через OkHttp, но оставим сигнатуру на всякий
     @FormUrlEncoded
     @POST("api/oauth/token")
-    suspend fun loginOAuthPassword(
-        @Header("Authorization") authHeaderBasic: String,   // "Basic <CLIENT_AUTH_TOKEN>"
+    suspend fun loginOAuth(
         @Field("grant_type") grantType: String = "password",
         @Field("username") username: String,
         @Field("password") password: String,
-        // не обязателен, но веб иногда шлёт
         @Field("remember") remember: Boolean = true
-    ): OAuthToken
+    ): Response<ResponseBody>
 
-    // Профиль пользователя
+    // Профиль пользователя (как в фронтовом index-*.js: /api/user/{username})
     @GET("api/user/{username}")
-    suspend fun getUserProfile(@Path("username") username: String): ApiEnvelope<UserProfile>
+    suspend fun getUser(
+        @Path("username") username: String
+    ): ApiEnvelope<UserProfile>
 
     // Статус data-сессии
     @GET("api/connection/DATA/status")
