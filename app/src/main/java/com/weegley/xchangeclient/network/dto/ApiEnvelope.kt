@@ -3,7 +3,8 @@ package com.weegley.xchangeclient.network.dto
 import com.google.gson.annotations.SerializedName
 
 /**
- * Унифицированный ответ Xchange. Полезная нагрузка в [value].
+ * Унифицированная обёртка для большинства ответов (кроме OAuth).
+ * Данные лежат в поле [value] (из "return").
  */
 data class ApiEnvelope<T>(
     @SerializedName("return")

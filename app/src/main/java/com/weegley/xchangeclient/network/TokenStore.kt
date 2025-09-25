@@ -1,8 +1,8 @@
 package com.weegley.xchangeclient.network
 
 /**
- * Простое in-memory хранилище Bearer-токена.
- * При желании позже перенесём в DataStore.
+ * Простейшее in-memory хранилище Bearer-токена.
+ * При желании можно сохранить в DataStore (не обязательно).
  */
 object TokenStore {
     @Volatile

@@ -1,18 +1,21 @@
 package com.weegley.xchangeclient.notifications
 
 import android.app.*
-import android.content.*
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.weegley.xchangeclient.MainActivity
 import com.weegley.xchangeclient.R
-import com.weegley.xchangeclient.service.*
+import com.weegley.xchangeclient.service.ServiceActions
+import com.weegley.xchangeclient.service.SessionService
+import com.weegley.xchangeclient.service.SessionState
+import com.weegley.xchangeclient.service.UiState
 
 private const val TAG = "Notifier"
 
 object Notifier {
-
     const val CHANNEL_ID = "session_status_channel"
     const val CHANNEL_NAME = "Session status"
     const val NOTIFICATION_ID = 1001
@@ -25,8 +28,7 @@ object Notifier {
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val existing = mgr.getNotificationChannel(CHANNEL_ID)
-            if (existing == null) {
+            if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
                 val ch = NotificationChannel(
                     CHANNEL_ID,
                     CHANNEL_NAME,
@@ -41,27 +43,22 @@ object Notifier {
         }
     }
 
-    fun build(
-        ctx: Context,
-        ui: UiState
-    ): Notification {
-
+    fun build(ctx: Context, ui: UiState): Notification {
         val title = when (ui.state) {
             SessionState.OFFLINE   -> "Offline"
             SessionState.LOGGED_IN -> "Logged in"
             SessionState.CONNECTED -> "Connected"
         }
 
-        val content = when {
-            ui.state == SessionState.CONNECTED && ui.timeLeft.isNotBlank() && ui.timeLeft != "--:--:--" ->
-                "Time left: ${ui.timeLeft}"
+        val content = when (ui.state) {
+            SessionState.CONNECTED ->
+                if (ui.timeLeft != "--:--:--") "Time left: ${ui.timeLeft}" else "XChange Client"
             else -> "XChange Client"
         }
 
+        val mainIntent = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val mainPi = PendingIntent.getActivity(
-            ctx,
-            REQ_MAIN,
-            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            ctx, REQ_MAIN, mainIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
 
@@ -93,7 +90,7 @@ object Notifier {
             .setContentIntent(mainPi)
 
         when (ui.state) {
-            SessionState.OFFLINE -> builder.addAction(0, "Login", loginPi)
+            SessionState.OFFLINE   -> builder.addAction(0, "Login", loginPi)
             SessionState.LOGGED_IN -> builder.addAction(0, "Connect", connectPi)
             SessionState.CONNECTED -> builder.addAction(0, "Disconnect", disconnectPi)
         }

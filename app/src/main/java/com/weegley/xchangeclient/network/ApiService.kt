@@ -4,50 +4,38 @@ import com.weegley.xchangeclient.network.dto.ApiEnvelope
 import com.weegley.xchangeclient.network.dto.AuthToken
 import com.weegley.xchangeclient.network.dto.ConnectStatus
 import com.weegley.xchangeclient.network.dto.UserProfile
-import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Path
-import retrofit2.http.Query
+import retrofit2.http.*
 
 /**
- * Retrofit API для мобильного домена https://m.xchange-box.com/
+ * Мобильное API m.xchange-box.com
  */
 interface ApiService {
 
-    // --- AUTH ---
-    // Логин через JSON. Возвращает accessToken, который кладём в TokenStore.
-    // POST https://m.xchange-box.com/api/auth/login
-    @POST("api/auth/login")
-    suspend fun loginAuth(
-        @Body body: Map<String, String> // {"username": "...", "password": "..."}
-    ): ApiEnvelope<AuthToken>
+    // OAuth: возвращает "плоский" JSON с токеном, НЕ ApiEnvelope
+    @FormUrlEncoded
+    @POST("api/oauth/token")
+    suspend fun loginOAuth(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("grant_type") grantType: String = "password",
+        @Field("client_id") clientId: String = "mobile"
+    ): AuthToken
 
-    // --- USER PROFILE ---
-    // GET https://m.xchange-box.com/api/user/{username}
-    // В .value приходит профиль пользователя (UserProfile)
+    // Профиль пользователя (обёрнут ApiEnvelope с полем "return")
     @GET("api/user/{username}")
-    suspend fun getUser(
+    suspend fun getUserProfile(
         @Path("username") username: String
     ): ApiEnvelope<UserProfile>
 
-    // --- DATA CONNECTION STATUS ---
-    // GET https://m.xchange-box.com/api/connection/DATA/status
-    // В .value — текущее состояние data-сессии
+    // Статус DATA-сессии
     @GET("api/connection/DATA/status")
-    suspend fun getConnectStatus(): ApiEnvelope<ConnectStatus?>
+    suspend fun getConnectStatus(): ApiEnvelope<ConnectStatus>
 
-    // --- START DATA SESSION ---
-    // POST https://m.xchange-box.com/api/connection/DATA/start?channelId=...
-    // В .value — актуальный ConnectStatus (или null, но обычно приходит объект)
+    // Старт DATA-сессии
     @POST("api/connection/DATA/start")
-    suspend fun startData(
-        @Query("channelId") channelId: Int
-    ): ApiEnvelope<ConnectStatus?>
+    suspend fun startData(@Query("channelId") channelId: Int): ApiEnvelope<ConnectStatus>
 
-    // --- STOP DATA SESSION ---
-    // POST https://m.xchange-box.com/api/connection/DATA/stop
-    // В .value — актуальный ConnectStatus (или null)
+    // Стоп DATA-сессии
     @POST("api/connection/DATA/stop")
-    suspend fun stopData(): ApiEnvelope<ConnectStatus?>
+    suspend fun stopData(): ApiEnvelope<ConnectStatus>
 }

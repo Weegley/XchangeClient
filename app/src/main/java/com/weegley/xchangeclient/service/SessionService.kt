@@ -41,6 +41,7 @@ class SessionService : Service() {
         }
     }
 
+    // --- deps / scope ---
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val api by lazy { BackendConfig.api }
     private val repo by lazy { SessionRepository(api) }
@@ -49,13 +50,14 @@ class SessionService : Service() {
         super.onCreate()
         Log.i(TAG, "onCreate()")
         Notifier.ensureChannel(this)
-        // поднимем FGS сразу, чтобы держать процесс и показать статус
+        // поднимем FGS сразу (покажем текущее состояние — при старте OFFLINE)
         startForegroundWithUi(SessionBus.uiState.value)
     }
 
     private fun startForegroundWithUi(ui: UiState) {
         val notification: Notification = Notifier.build(this, ui)
         if (Build.VERSION.SDK_INT >= 34) {
+            // Чётко указываем тип: DATA_SYNC (подходит для сетевого обмена/синхронизации)
             startForeground(
                 Notifier.NOTIFICATION_ID,
                 notification,
@@ -73,7 +75,7 @@ class SessionService : Service() {
 
         when (action) {
             ServiceActions.ACTION_START -> {
-                // просто рефреш уведомления
+                // просто обновим уведомление актуальным UiState
                 notifyCurrent()
             }
 
@@ -98,8 +100,7 @@ class SessionService : Service() {
     }
 
     /**
-     * Логин и первичное получение профиля (канал/баланс).
-     * Работает с мобильным API: POST /api/auth/login (JSON).
+     * Логин в мобильное API (OAuth) + подтянуть профиль (баланс и т.п.).
      */
     private suspend fun doLoginAndPrefetch() {
         runCatching {
@@ -108,20 +109,20 @@ class SessionService : Service() {
             val password = s.password
             require(username.isNotBlank() && password.isNotBlank()) { "Empty credentials" }
 
-            // 1) централизованный логин
+            // 1) OAuth login → сохраняем Bearer в TokenStore
             AuthRepository.login(username, password).getOrThrow()
 
-            // 2) профиль (для баланса и каналов)
+            // 2) профиль пользователя
             val profile = repo.fetchUserProfile(username).getOrThrow()
             val corp = profile.corporateCredit ?: 0.0
             val pers = profile.personalCredit ?: 0.0
-            val balanceLabel = "$${"%.2f".format(corp + pers)}"
+            val total = corp + pers
 
             withContext(Dispatchers.Main) {
                 SessionBus.update {
                     it.copy(
                         state = SessionState.LOGGED_IN,
-                        balance = balanceLabel
+                        balance = "$${"%.2f".format(total)}"
                     )
                 }
                 notifyCurrent()
@@ -133,8 +134,8 @@ class SessionService : Service() {
 
     /**
      * Старт DATA-сессии:
-     * - выясняем channelId из профиля
-     * - дергаем POST /api/connection/DATA/start?channelId=...
+     * - выясняем channelId по профилю
+     * - POST /api/connection/DATA/start?channelId=...
      */
     private suspend fun doConnect() {
         runCatching {
@@ -143,9 +144,8 @@ class SessionService : Service() {
             require(username.isNotBlank()) { "Empty username" }
 
             val chId = repo.fetchFirstDataChannelId(username).getOrThrow()
-
-            // Мобильный API возвращает ApiEnvelope<ConnectStatus?>
-            api.startData(channelId = chId)
+            val env = api.startData(channelId = chId)
+            Log.i(TAG, "startData(): label=${env.label} desc=${env.successDescription}")
 
             withContext(Dispatchers.Main) {
                 SessionBus.update { it.copy(state = SessionState.CONNECTED) }
@@ -156,9 +156,13 @@ class SessionService : Service() {
         }
     }
 
+    /**
+     * Остановка DATA-сессии.
+     */
     private suspend fun doDisconnect() {
         runCatching {
-            api.stopData()
+            val env = api.stopData()
+            Log.i(TAG, "stopData(): label=${env.label} desc=${env.successDescription}")
             withContext(Dispatchers.Main) {
                 SessionBus.update { it.copy(state = SessionState.LOGGED_IN) }
                 notifyCurrent()

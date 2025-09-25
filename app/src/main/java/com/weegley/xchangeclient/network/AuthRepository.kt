@@ -1,33 +1,20 @@
 package com.weegley.xchangeclient.network
 
 import android.util.Log
-import com.weegley.xchangeclient.network.dto.AuthToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object AuthRepository {
     private const val TAG = "AuthRepository"
 
-    /**
-     * Логин через мобильный эндпоинт.
-     * Возвращаем Result<Unit> — внутри обязательно возвращаем Unit.
-     */
     suspend fun login(username: String, password: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val env = BackendConfig.api.loginAuth(
-                    mapOf(
-                        "username" to username,
-                        "password" to password
-                    )
-                )
-                val token: AuthToken = env.value ?: error("Empty token payload")
-                val bearer = token.accessToken ?: error("accessToken is null/empty")
-
+                val token = BackendConfig.api.loginOAuth(username = username, password = password)
+                val bearer = token.accessToken ?: error("Empty access_token")
                 TokenStore.setToken(bearer)
-                Log.i(TAG, "login(): token received, expiresIn=${token.expiresIn}")
-
-                Unit // ← ОБЯЗАТЕЛЬНО, чтобы тип был Result<Unit>
+                Log.i(TAG, "login(): token received, expires_in=${token.expiresIn}")
+                Unit
             }
         }
 
