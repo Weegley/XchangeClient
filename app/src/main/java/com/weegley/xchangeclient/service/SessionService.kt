@@ -20,6 +20,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
+
 
 class SessionService : Service() {
 
@@ -144,17 +146,40 @@ class SessionService : Service() {
             require(username.isNotBlank()) { "Empty username" }
 
             val chId = repo.fetchFirstDataChannelId(username).getOrThrow()
-            val env = api.startData(channelId = chId)
-            Log.i(TAG, "startData(): label=${env.label} desc=${env.successDescription}")
 
-            withContext(Dispatchers.Main) {
-                SessionBus.update { it.copy(state = SessionState.CONNECTED) }
-                notifyCurrent()
+            // Пытаемся стартовать DATA-сессию.
+            try {
+                val env = api.startData(channelId = chId)
+                // Если пришёл 200 — всё ок, считаем подключёнными.
+                withContext(Dispatchers.Main) {
+                    SessionBus.update { it.copy(state = SessionState.CONNECTED) }
+                    notifyCurrent()
+                }
+            } catch (e: HttpException) {
+                // Особый кейс: уже подключены — сервер вернул 412 + payload c SESSION_DATA_CONNECTED
+                if (e.code() == 412) {
+                    val body = e.response()?.errorBody()?.string().orEmpty()
+                    // Без лишних моделей: просто проверяем маркер из payload
+                    val alreadyConnected =
+                        body.contains("\"SESSION_DATA_CONNECTED\"", ignoreCase = true)
+
+                    if (alreadyConnected) {
+                        withContext(Dispatchers.Main) {
+                            SessionBus.update { it.copy(state = SessionState.CONNECTED) }
+                            notifyCurrent()
+                        }
+                    } else {
+                        throw e
+                    }
+                } else {
+                    throw e
+                }
             }
         }.onFailure { e ->
             Log.e(TAG, "Connect failed", e)
         }
     }
+
 
     /**
      * Остановка DATA-сессии.
